@@ -4,7 +4,9 @@ import os
 
 app = Flask(__name__)
 
-DB_PATH = 'database.db'
+# En Vercel, necesitamos usar /tmp para tener permisos de escritura en SQLite
+# pero recuerda que los datos NO persistirán entre reinicios.
+DB_PATH = '/tmp/database.db' if os.environ.get('VERCEL') else 'database.db'
 
 def get_db_connection():
     try:
@@ -106,9 +108,13 @@ def datos_json():
             conn.close()
     return jsonify([]), 500
 
+# Inicializar la base de datos al importar el módulo (necesario para Vercel)
+if not os.path.exists(DB_PATH):
+    from init_sqlite import init_db
+    # Pasamos el DB_PATH para que cree la base de datos en el lugar correcto
+    import init_sqlite
+    init_sqlite.DB_PATH = DB_PATH
+    init_db()
+
 if __name__ == '__main__':
-    # Asegurarse de que la base de datos existe al iniciar
-    if not os.path.exists(DB_PATH):
-        from init_sqlite import init_db
-        init_db()
     app.run(host='0.0.0.0', port=5000, debug=True)
