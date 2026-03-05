@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Monitoreo del Inversor</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #f4f7f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .card { border: none; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: transform 0.2s; }
+        .card:hover { transform: translateY(-5px); }
+        #led-indicator { width: 30px; height: 30px; border-radius: 50%; display: inline-block; margin-left: 10px; vertical-align: middle; border: 2px solid #555; }
+        .led-off { background-color: #ff0000; box-shadow: 0 0 10px #ff0000; }
+        .led-on { background-color: #00ff00; box-shadow: 0 0 10px #00ff00; }
+        .chart-container { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark bg-dark mb-4">
+    <div class="container">
+        <span class="navbar-brand mb-0 h1">🔌 SCADA Inversor Local</span>
+    </div>
+</nav>
+
+<div class="container">
+    <h1 class="text-center mb-4">Sistema de Monitoreo del Inversor</h1>
+
+    <!-- Tarjetas de Valores -->
+    <div class="row text-center mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="card p-3">
+                <h5>Voltaje 1</h5>
+                <h2 id="v1-val" class="text-primary">--</h2>
+                <small class="text-muted">Voltios (V)</small>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card p-3">
+                <h5>Voltaje 2</h5>
+                <h2 id="v2-val" class="text-primary">--</h2>
+                <small class="text-muted">Voltios (V)</small>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card p-3">
+                <h5>Corriente 1</h5>
+                <h2 id="i1-val" class="text-success">--</h2>
+                <small class="text-muted">Amperios (A)</small>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card p-3">
+                <h5>Corriente 2</h5>
+                <h2 id="i2-val" class="text-success">--</h2>
+                <small class="text-muted">Amperios (A)</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gráfica -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="chart-container">
+                <canvas id="realtimeChart" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel de Control -->
+    <div class="row justify-content-center">
+        <div class="col-md-6 mb-4">
+            <div class="card p-4 text-center">
+                <h3>Control del Inversor</h3>
+                <div class="my-3">
+                    <span class="h5">Estado: <span id="estado-text">--</span></span>
+                    <div id="led-indicator" class="led-off"></div>
+                </div>
+                <div class="d-flex justify-content-center gap-3">
+                    <button class="btn btn-success btn-lg px-5" onclick="cambiarEstado('ON')">ENCENDER</button>
+                    <button class="btn btn-danger btn-lg px-5" onclick="cambiarEstado('OFF')">APAGAR</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Inicialización de la gráfica
+    const ctx = document.getElementById('realtimeChart').getContext('2d');
+    const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                { label: 'Voltaje 1', borderColor: '#0d6efd', data: [], tension: 0.3 },
+                { label: 'Voltaje 2', borderColor: '#6610f2', data: [], tension: 0.3 },
+                { label: 'Corriente 1', borderColor: '#198754', data: [], tension: 0.3 },
+                { label: 'Corriente 2', borderColor: '#fd7e14', data: [], tension: 0.3 }
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: { y: { beginAtZero: true } },
+            animation: false
+        }
+    });
+
+    async function actualizar() {
+        try {
+            // Actualizar datos de la gráfica y tarjetas
+            const res = await fetch('/datos_json');
+            const data = await res.json();
+
+            if (data.length > 0) {
+                const labels = data.map(d => new Date(d.fecha).toLocaleTimeString());
+                const v1 = data.map(d => d.voltaje1);
+                const v2 = data.map(d => d.voltaje2);
+                const i1 = data.map(d => d.corriente1);
+                const i2 = data.map(d => d.corriente2);
+
+                chart.data.labels = labels;
+                chart.data.datasets[0].data = v1;
+                chart.data.datasets[1].data = v2;
+                chart.data.datasets[2].data = i1;
+                chart.data.datasets[3].data = i2;
+                chart.update();
+
+                // Actualizar tarjetas con el último valor
+                const last = data[data.length - 1];
+                document.getElementById('v1-val').innerText = last.voltaje1.toFixed(2);
+                document.getElementById('v2-val').innerText = last.voltaje2.toFixed(2);
+                document.getElementById('i1-val').innerText = last.corriente1.toFixed(2);
+                document.getElementById('i2-val').innerText = last.corriente2.toFixed(2);
+            }
+
+            // Actualizar LED y estado
+            const resComando = await fetch('/comando');
+            const estado = await resComando.text();
+            
+            const led = document.getElementById('led-indicator');
+            const txt = document.getElementById('estado-text');
+            txt.innerText = estado;
+            
+            if (estado.trim() === 'ON') {
+                led.className = 'led-on';
+                txt.className = 'text-success fw-bold';
+            } else {
+                led.className = 'led-off';
+                txt.className = 'text-danger fw-bold';
+            }
+
+        } catch (e) {
+            console.error("Error en la actualización:", e);
+        }
+    }
+
+    async function cambiarEstado(nuevoEstado) {
+        const formData = new FormData();
+        formData.append('estado', nuevoEstado);
+        
+        try {
+            const res = await fetch('/cambiar_estado', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                actualizar(); // Forzar actualización visual
+            }
+        } catch (e) {
+            alert("Error al cambiar estado");
+        }
+    }
+
+    // Actualizar cada 2 segundos
+    setInterval(actualizar, 2000);
+    actualizar(); // Primera carga
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
